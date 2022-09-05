@@ -9,6 +9,13 @@ final myStringProvider = Provider((ref) => 'Hello world!');
 // contoh yang reset ketika pindah halaman
 final counterProvider = StateProvider.autoDispose((ref) => 0);
 
+// fake web socket provider
+final websocketClientProvider = Provider<WebsocketClient>(
+      (ref) {
+    return FakeWebsocketClient();
+  },
+);
+
 void main() {
   runApp(const ProviderScope(child: MyApp()));
 }
@@ -61,6 +68,16 @@ class CounterPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+
+    final counterStreamProvider = StreamProvider.family<int, int>((ref, start) {
+      final wsClient = ref.watch(websocketClientProvider);
+
+      return wsClient.getCounterStream(start);
+    });
+
+    // AsyncValue is a union of 3 cases - data, error and loading
+    final AsyncValue<int> counterStream = ref.watch(counterStreamProvider(5));
+
     // Using the WidgetRef to get the counter int from the counterProvider.
     // The watch method makes the widget rebuild whenever the int changes value.
     //   - something like setState() but automatic
@@ -108,7 +125,16 @@ class CounterPage extends ConsumerWidget {
       ),
       body: Center(
         child: Text(
-          counter.toString(),
+          // counter.toString(),
+          counterStream
+              .when(
+            data: (int value) => value,
+            error: (Object e, _) => e,
+            // While we're waiting for the first counter value to arrive
+            // we want the text to display zero.
+            loading: () => 0,
+          )
+              .toString(),
           style: Theme.of(context).textTheme.displayMedium,
         ),
       ),
@@ -123,5 +149,20 @@ class CounterPage extends ConsumerWidget {
         },
       ),
     );
+  }
+}
+
+abstract class WebsocketClient {
+  Stream<int> getCounterStream([int start]);
+}
+
+class FakeWebsocketClient implements WebsocketClient {
+  @override
+  Stream<int> getCounterStream([int start = 0]) async* {
+    int i = start;
+    while (true) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      yield i++;
+    }
   }
 }
